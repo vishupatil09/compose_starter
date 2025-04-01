@@ -1,0 +1,54 @@
+Calendar
+
+@Composable
+fun AppInputField(
+  modifier: Modifier = Modifier,
+  label: String = "label",
+  value: String,
+  leadingIcon: @Composable (() -> Unit)? = null,
+  trailingIcon: @Composable (() -> Unit)? = null,
+  error: String? = null,
+  keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+  keyboardActions: KeyboardActions = KeyboardActions.Default,
+  readOnly: Boolean = false,
+  onValueChange: (String) -> Unit
+) {
+  val focusRequester = remember { FocusRequester() }
+  val isFocused = remember { mutableStateOf(false) }
+  OutlinedTextField(
+    modifier = modifier
+      .focusRequester(focusRequester)
+      .onFocusChanged { focusState ->
+        isFocused.value = focusState.isFocused
+      },
+    value = value,
+    onValueChange = onValueChange,
+    colors = OutlinedTextFieldDefaults.colors().copy(
+      focusedTextColor = AppTheme.colors.primary,
+      unfocusedTextColor = AppTheme.colors.darkTextColor,
+      focusedLeadingIconColor = AppTheme.colors.primary,
+      unfocusedLeadingIconColor = AppTheme.colors.mediumtextColor,
+      focusedTrailingIconColor = AppTheme.colors.primary,
+      unfocusedTrailingIconColor = AppTheme.colors.mediumtextColor
+    ),
+    isError = error?.isNotEmpty() ?: false,
+    textStyle = AppTheme.textStyles.semiBold.regular,
+    label = {
+      Text(
+        label,
+        modifier = Modifier
+          .background(color = Color.Transparent)
+          .padding(start = 4.dp, end = 4.dp),
+        style = if (isFocused.value || value.isNotEmpty()) AppTheme.textStyles.regular.extraSmall else AppTheme.textStyles.regular.small,
+        color = AppTheme.colors.mediumtextColor
+      )
+    },
+    leadingIcon = leadingIcon,
+    trailingIcon = trailingIcon,
+    keyboardOptions = keyboardOptions,
+    keyboardActions =keyboardActions,
+    readOnly = readOnly,
+    supportingText = { if (error?.isNotEmpty() == true) Text(text = error) }
+
+  )
+}
