@@ -1,0 +1,141 @@
+@Entity(tableName = "history")
+data class Calculation(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val expression: String
+)
+
+
+
+@Dao
+interface CalculationDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(calculation: Calculation)
+
+    @Query("SELECT * FROM history ORDER BY id DESC")
+    fun getAllCalculations(): Flow<List<Calculation>>
+}
+
+
+@Database(entities = [Calculation::class], version = 1)
+abstract class CalculationDatabase : RoomDatabase() {
+    abstract fun calculationDao(): CalculationDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: CalculationDatabase? = null
+
+        fun getDatabase(context: Context): CalculationDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    CalculationDatabase::class.java,
+                    "calculation_database"
+                ).build()
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
+}
+
+@HiltViewModel
+class CalculationViewModel @Inject constructor(private val dao: CalculationDao) : ViewModel() {
+
+    var num1 by mutableStateOf("")
+    var num2 by mutableStateOf("")
+    var selectedOperation by mutableStateOf("Add")
+    val history = dao.getAllCalculations().asLiveData()
+
+    fun calculateAndStore() {
+        val n1 = num1.toDoubleOrNull() ?: return
+        val n2 = num2.toDoubleOrNull() ?: return
+        val result = when (selectedOperation) {
+            "Add" -> n1 + n2
+            "Multiply" -> n1 * n2
+            "Divide" -> if (n2 != 0.0) n1 / n2 else return
+            else -> return
+        }
+        val expression = "$n1 ${getSymbol(selectedOperation)} $n2 = $result"
+        viewModelScope.launch {
+            dao.insert(Calculation(expression = expression))
+        }
+    }
+
+    private fun getSymbol(operation: String): String {
+        return when (operation) {
+            "Add" -> "+"
+            "Multiply" -> "*"
+            "Divide" -> "/"
+            else -> "?"
+        }
+    }
+}
+
+
+@Composable
+fun CalculatorScreen(viewModel: CalculationViewModel) {
+    val history by viewModel.history.observeAsState(emptyList())
+    Column(modifier = Modifier.padding(16.dp)) {
+        TextField(
+            value = viewModel.num1,
+            onValueChange = { viewModel.num1 = it },
+            label = { Text("Enter first number") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
+
+        TextField(
+            value = viewModel.num2,
+            onValueChange = { viewModel.num2 = it },
+            label = { Text("Enter second number") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
+
+        val operations = listOf("Add", "Multiply", "Divide")
+        var expanded by remember { mutableStateOf(false) }
+
+        Box {
+            Text(viewModel.selectedOperation, modifier = Modifier.clickable { expanded = true })
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                operations.forEach { operation ->
+                    DropdownMenuItem(onClick = {
+                        viewModel.selectedOperation = operation
+                        expanded = false
+                    }) {
+                        Text(operation)
+                    }
+                }
+            }
+        }
+
+        Button(onClick = { viewModel.calculateAndStore() }) {
+            Text("Calculate")
+        }
+
+        Button(onClick = { /* Show history */ }) {
+            Text("Show History")
+        }
+
+        LazyColumn {
+            items(history) { calc ->
+                Text(calc.expression)
+            }
+        }
+    }
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+object DatabaseModule {
+    @Provides
+    fun provideDatabase(@ApplicationContext context: Context): CalculationDatabase {
+        return CalculationDatabase.getDatabase(context)
+    }
+
+    @Provides
+    fun provideDao(db: CalculationDatabase): CalculationDao {
+        return db.calculationDao()
+    }
+}
+
+
+
